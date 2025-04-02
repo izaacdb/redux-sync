@@ -10,7 +10,7 @@ import type { RootState } from "YJ~Shared/Redux";
  * This acts as a listener if the dispatch prop is provided.
  * This acts as a broadcaster if the state prop is provided.
  * Don't provide both of these props in one place.
- * Alaywas provide the eventName prop.
+ * Always provide the eventName prop.
  */
 interface ReduxSyncProps<T> {
     eventName: string;
