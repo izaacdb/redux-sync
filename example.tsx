@@ -67,6 +67,11 @@ const SomeComponentInFirstApp = () => {
         example: 22,
     });
 
+    useEffect(()=>{
+        // Trigger broadcast
+        setState({example: 44})
+    },[])
+
     return (
         <div>
             <span>{broadcastState.example}</span>
