@@ -75,7 +75,7 @@ const SomeComponentInFirstApp = () => {
     return (
         <div>
             <span>{broadcastState.example}</span>
-            <ReduxSync<ContrivedReduxState> eventName="EXAMPLE_EVENT" state />
+            <ReduxSync<ContrivedReduxState> eventName="EXAMPLE_EVENT" state={state} />
         </div>
     );
 };
