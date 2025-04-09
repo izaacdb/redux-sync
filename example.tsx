@@ -1,94 +1,106 @@
-import React, { useEffect, useRef, useState } from "react";
-import { isEqual } from "lodash";
+import {useEffect, useRef} from "react";
+import {isEqual} from "lodash";
 
-import { UPDATE_AVAILABILITY_EVENT_NAME } from "YJ~Shared/AvailabilityControls/Constants";
+// The default empty state required for generic typing.
+type DefaultState = Record<string, never>;
 
-import type { RootState } from "YJ~Shared/Redux";
+// A type for the callback, which calls your redux dispatch function with state received from the event listener.
+type ReduxDispatchCallback<T> = (reduxState: T) => void;
 
-/**
- *
- * This acts as a listener if the dispatch prop is provided.
- * This acts as a broadcaster if the state prop is provided.
- * Don't provide both of these props in one place.
- * Always provide the eventName prop.
- */
 interface ReduxSyncProps<T> {
+    // A CustomEvent name for listening to and/or broadcasting your state change. We should have a naming convention for these.
     eventName: string;
-    state?: T;
-    dispatch?: (state: T) => void;
+    // A callback which calls your redux dispatch function with state received from the event listener.
+    reduxDispatchCallback: ReduxDispatchCallback<T>;
+    // Your application's redux state, or some part of the redux state. When changed it will trigger a broadcast.
+    reduxState: T;
 }
 
-export const ReduxSync = <T = RootState,>(props: ReduxSyncProps<T>) => {
-    const { state = undefined, dispatch, eventName = UPDATE_AVAILABILITY_EVENT_NAME } = props;
-    const previousState = useRef<T | undefined>(state);
+/**
+ * ReduxSync
+ *
+ * Synchronizes Redux state across multiple applications using CustomEvents.
+ *
+ * Usage requirements:
+ * - Use exactly one ReduxSync component per event type in each application you want synchronized.
+ * - Ensure the Redux state structure is consistent between applications.
+ * - You can sync either complete Redux state or specific portions of it.
+ *
+ * @param {string} eventName - Unique identifier for the CustomEvent to use for syncing
+ * @param {object} reduxState - The Redux state (or portion) to synchronize
+ * @param {function} reduxDispatchCallback - Callback function that updates Redux when
+ *                                          state changes are received from other contexts
+ *
+ * @example: Synchronizing availability controls between two applications.
+ *
+ * Application One:
+ * -----------------
+ * <ReduxSync
+ *    eventName="UPDATE_AVAILABILITY_EVENT"
+ *    reduxState={props.availabilityControls}
+ *    reduxDispatchCallback={(state) =>
+ *        dispatch({
+ *           type: actions.SET_AVAILABILITY_CONTROLS,
+ *           state,
+ *        })
+ *    }
+ * />
+ *
+ * Application Two:
+ * -----------------
+ * <ReduxSync
+ *    eventName="UPDATE_AVAILABILITY_EVENT"
+ *    reduxState={props.availabilityControls}
+ *    reduxDispatchCallback={(state) =>
+ *        dispatch({
+ *           type: actions.SET_AVAILABILITY_CONTROLS,
+ *           state,
+ *        })
+ *    }
+ * />
+ */
+export const ReduxSync = <T extends object = DefaultState>({
+   eventName,
+   reduxDispatchCallback,
+   reduxState,
+}: ReduxSyncProps<T>) => {
+    const previousReduxState = useRef<T | undefined>(reduxState);
 
     // Listener
     useEffect(() => {
-        // If a dispatch was provided this should send the event.detail to a redux store (defined externally).
-        const handleAvailabilityUpdate = (event: CustomEvent<T>) => {
-            if (dispatch && !isEqual(event.detail, previousState.current)) {
-                // The activity has changed, update the store. These types are the same.
-                dispatch(event.detail);
-            }
-        };
-
-        document.addEventListener(eventName, handleAvailabilityUpdate as EventListener);
-
-        return () => {
-            document.removeEventListener(eventName, handleAvailabilityUpdate as EventListener);
-        };
-    }, [dispatch, eventName]);
+        return listenForEvent(eventName, reduxDispatchCallback);
+    }, [reduxDispatchCallback, eventName]);
 
     // Broadcaster
     useEffect(() => {
-        // If the state was provided and changed this should broadcast the change as a CustomEvent
-        if (state && !isEqual(state, previousState.current)) {
-            previousState.current = state;
-            const event = new CustomEvent<T>(eventName, {
-                detail: state,
-                bubbles: true,
-            });
-
-            document.dispatchEvent(event);
+        // If the reduxState was provided and changed this should broadcast the change as a CustomEvent
+        if (!isEqual(reduxState, previousReduxState.current)) {
+            previousReduxState.current = reduxState;
+            broadcastEvent(reduxState, eventName);
         }
-    }, [state, eventName]);
+    }, [eventName, reduxState]);
 
     return null;
 };
 
-### Implementation 
-
-interface ContrivedReduxState {
-    example: number;
-}
-
-const SomeComponentInFirstApp = () => {
-    const [broadcastState, setBroadcastState] = useState<ContrivedReduxState>({
-        example: 22,
+const broadcastEvent = <T extends object>(reduxState: T, eventName: string) => {
+    const event = new CustomEvent<T>(eventName, {
+        detail: reduxState,
+        bubbles: true,
     });
-
-    useEffect(()=>{
-        // Trigger broadcast
-        setState({example: 44})
-    },[])
-
-    return (
-        <div>
-            <span>{broadcastState.example}</span>
-            <ReduxSync<ContrivedReduxState> eventName="EXAMPLE_EVENT" state={state} />
-        </div>
-    );
+    document.dispatchEvent(event);
 };
 
-const SomeComponentInSecondApp = () => {
-    const [listenerState, setListenerState] = useState<ContrivedReduxState>({
-        example: 0,
-    });
-
-    return (
-        <div>
-            <span>{listenerState.example}</span>
-            <ReduxSync<ContrivedReduxState> eventName="EXAMPLE_EVENT" dispatch={setListenerState} />
-        </div>
-    );
+const listenForEvent = <T extends object>(
+    eventName: string,
+    dispatchCallback: ReduxDispatchCallback<T>
+): (() => void) => {
+    const handleEvent = (event: Event) => {
+        const customEvent = event as CustomEvent<T>;
+        dispatchCallback(customEvent.detail);
+    };
+    document.addEventListener(eventName, handleEvent);
+    return () => {
+        document.removeEventListener(eventName, handleEvent);
+    };
 };
